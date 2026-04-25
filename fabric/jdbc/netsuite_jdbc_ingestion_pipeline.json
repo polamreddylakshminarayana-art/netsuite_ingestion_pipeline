@@ -1,0 +1,218 @@
+{
+    "name": "pl_netsuite_waste_harmonics_ingestion",
+    "objectId": "8015ba57-3a07-4a94-854d-65253fcafa19",
+    "properties": {
+        "activities": [
+            {
+                "name": "Get Metadata",
+                "description": "Retrieve Waste Harmonics NetSuite Objects Metadata from Utils Lakehouse.",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "ExcelSource",
+                        "storeSettings": {
+                            "type": "LakehouseReadSettings",
+                            "recursive": true,
+                            "enablePartitionDiscovery": false
+                        }
+                    },
+                    "firstRowOnly": false,
+                    "datasetSettings": {
+                        "annotations": [],
+                        "linkedService": {
+                            "name": "lh_utils",
+                            "properties": {
+                                "annotations": [],
+                                "type": "Lakehouse",
+                                "typeProperties": {
+                                    "workspaceId": "8e505f92-2baa-4784-853e-edf6044c1517",
+                                    "artifactId": "c25ffaa2-539f-463b-b9e3-b12be0c53b62",
+                                    "rootFolder": "Files"
+                                }
+                            }
+                        },
+                        "type": "Excel",
+                        "typeProperties": {
+                            "sheetName": {
+                                "value": "@pipeline().parameters.config_sheet_name",
+                                "type": "Expression"
+                            },
+                            "location": {
+                                "type": "LakehouseLocation",
+                                "fileName": {
+                                    "value": "@pipeline().parameters.config_file_name",
+                                    "type": "Expression"
+                                },
+                                "folderPath": {
+                                    "value": "@pipeline().parameters.config_directory",
+                                    "type": "Expression"
+                                }
+                            },
+                            "firstRowAsHeader": true
+                        },
+                        "schema": []
+                    }
+                }
+            },
+            {
+                "name": "Filter Active Objects",
+                "description": "Filtering only Active Objects",
+                "type": "Filter",
+                "dependsOn": [
+                    {
+                        "activity": "Get Metadata",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "items": {
+                        "value": "@activity('Get Metadata').output.value",
+                        "type": "Expression"
+                    },
+                    "condition": {
+                        "value": "@equals(item().is_active, '1')       ",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "NetSuite Table Ingestion Notebook Small Tables",
+                "description": "Ingests NetSuite source tables into the Fabric Lakehouse, supporting both full and incremental data loads",
+                "type": "TridentNotebook",
+                "dependsOn": [
+                    {
+                        "activity": "Filter Small Tables",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.03:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "notebookId": "5b2556cf-2cc3-41d4-aef6-6a9907b241a7",
+                    "workspaceId": "8e505f92-2baa-4784-853e-edf6044c1517",
+                    "parameters": {
+                        "table_array": {
+                            "value": {
+                                "value": "@string(activity('Filter Small Tables').output.value)",
+                                "type": "Expression"
+                            },
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "Filter Small Tables",
+                "description": "Filtering only Active Objects",
+                "type": "Filter",
+                "dependsOn": [
+                    {
+                        "activity": "Filter Active Objects",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "items": {
+                        "value": "@activity('Filter Active Objects').output.value",
+                        "type": "Expression"
+                    },
+                    "condition": {
+                        "value": "@equals(item().table_size, 'small')       ",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "Filter Large Tables",
+                "description": "Filtering only Active Objects",
+                "type": "Filter",
+                "dependsOn": [
+                    {
+                        "activity": "Filter Active Objects",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "items": {
+                        "value": "@activity('Filter Active Objects').output.value",
+                        "type": "Expression"
+                    },
+                    "condition": {
+                        "value": "@equals(item().table_size, 'big')       ",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "NetSuite Table Ingestion Notebook Large Tables",
+                "description": "Ingests NetSuite source tables into the Fabric Lakehouse, supporting both full and incremental data loads",
+                "type": "TridentNotebook",
+                "dependsOn": [
+                    {
+                        "activity": "Filter Large Tables",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.03:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "notebookId": "5b2556cf-2cc3-41d4-aef6-6a9907b241a7",
+                    "workspaceId": "8e505f92-2baa-4784-853e-edf6044c1517",
+                    "parameters": {
+                        "table_array": {
+                            "value": {
+                                "value": "@string(activity('Filter Large Tables').output.value)",
+                                "type": "Expression"
+                            },
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        ],
+        "parameters": {
+            "config_directory": {
+                "type": "string",
+                "defaultValue": "configs"
+            },
+            "config_file_name": {
+                "type": "string",
+                "defaultValue": "config_data_platform_source_ingestion.xlsx"
+            },
+            "config_sheet_name": {
+                "type": "string",
+                "defaultValue": "netsuite_waste_harmonics"
+            }
+        },
+        "lastModifiedByObjectId": "f485648c-edfa-4fcd-bcd4-8e61e36da5c3",
+        "lastPublishTime": "2026-01-28T13:27:54Z"
+    }
+}
